@@ -13,7 +13,7 @@ Quick usage `main.go`
 ```go
 // Add global middlewares
 app.Use(cors.New(cors.Data{
-    core.HeaderAccessControlAllowOrigin: "*",
+    core.HeaderAccessControlAllowOrigin: cors.AllowedOrigin,
 }))
 ```
 ### Access controls:
