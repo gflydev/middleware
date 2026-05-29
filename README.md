@@ -1,4 +1,4 @@
-# Middlewares
+# gFly Middlewares
 
 ## CORS
 Support 6 access controls `Access-Control-Allow-Origin`, `Access-Control-Allow-Headers`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Credentials`, `Access-Control-Expose-Headers`, `Access-Control-Max-Age`. 
