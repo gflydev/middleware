@@ -108,6 +108,30 @@ app.Use(csrf.Middleware(
 ))
 ```
 
+### Token API
+
+The CSRF package includes a built-in API endpoint that returns the current CSRF token and header name - useful for SPAs that need to fetch the token programmatically.
+
+Register the router in `main.go`:
+```go
+import "github.com/gflydev/middleware/csrf"
+
+// Register CSRF token API
+csrfRouter := csrf.NewCsrfTokenApi()
+router.GET("/csrf", csrfRouter)
+
+// OR
+csrf.RegisterApi(router)
+```
+
+Response format (JSON):
+```json
+{
+    "csrf_token":  "a1b2c3d4e5f6...",
+    "header_name": "X-CSRF-Token"
+}
+```
+
 ### Frontend Integration
 
 **AJAX Requests** — include the token in the `X-CSRF-Token` header:
