@@ -80,3 +80,65 @@ groupAuth.POST("/signin", f.Middleware(middleware.RateLimitParamsRoute(3, 15))(a
 - When the limit is exceeded, returns HTTP `429 Too Many Requests`
 - Cache entries automatically expire after the configured time window
 - If cache is unavailable, requests are allowed through (fail-open)
+
+## CSRF
+Protect your application from Cross-Site Request Forgery (CSRF) attacks using the double-submit cookie pattern. Generates cryptographically secure tokens per session and validates them on state-changing requests (POST, PUT, PATCH, DELETE). Safe methods (GET, HEAD, OPTIONS, TRACE) are automatically excluded.
+
+### Usage
+Install
+```bash
+go get -u github.com/gflydev/middleware/csrf@v1.0.0
+```
+
+Set token expiry in your `.env` file (in seconds, default: 86400 = 24h):
+```env
+# CSRF Settings:
+#   CSRF token expiry in seconds (default: 86400 = 24 hours)
+CSRF_EXPIRY=86400
+```
+
+Quick usage `main.go`
+```go
+import "github.com/gflydev/middleware/csrf"
+
+// Apply CSRF protection globally, excluding public endpoints
+app.Use(csrf.Middleware(
+    "/api/v1/auth/login",
+    "/api/v1/auth/register",
+))
+```
+
+### Frontend Integration
+
+**AJAX Requests** — include the token in the `X-CSRF-Token` header:
+```javascript
+fetch('/api/v1/users', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken
+    },
+    body: JSON.stringify(data)
+});
+```
+
+**HTML Forms** — include the token as a hidden `_token` field:
+```html
+<form method="POST" action="/api/v1/users">
+    <input type="hidden" name="_token" value="{{ .csrf_token }}">
+    <input type="text" name="name" required>
+    <button type="submit">Create User</button>
+</form>
+```
+
+Expose the token to your frontend via `GetCSRFToken()`:
+```go
+token := csrf.GetCSRFToken(c)
+```
+
+### How it works
+- Token is generated and stored in both the session and a cookie
+- Safe methods (GET, HEAD, OPTIONS, TRACE) are excluded — token is simply set/refreshed
+- On unsafe methods (POST, PUT, PATCH, DELETE), the request token (from header → form field → cookie) is validated against the session token using constant-time comparison to prevent timing attacks
+- After successful validation, the token is regenerated for additional security
+- Returns HTTP `403 Forbidden` with `"CSRF token mismatch"` on validation failure
