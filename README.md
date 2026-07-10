@@ -75,8 +75,10 @@ groupAuth.POST("/signin", f.Middleware(middleware.RateLimitParamsRoute(3, 15))(a
 
 ### How it works
 - Tracks requests by `clientIP:path` combination stored in cache
-- On first request, creates a cache entry with count `1` and TTL equal to the time window
-- On subsequent requests, increments the counter
+- On first request, creates a cache entry with count `1` and a fixed window expiry
+- On subsequent requests, increments the counter **without** resetting the window, so a steady stream of requests cannot extend the window indefinitely
+- Concurrent requests for the same key are serialized with an in-process lock, so the limit is not exceeded under load (distributed deployments still need an atomic counter in the shared cache)
+- Every response includes `X-RateLimit-Limit` and `X-RateLimit-Remaining` headers; blocked responses also include `Retry-After` (seconds)
 - When the limit is exceeded, returns HTTP `429 Too Many Requests`
 - Cache entries automatically expire after the configured time window
 - If cache is unavailable, requests are allowed through (fail-open)
@@ -165,4 +167,20 @@ token := csrf.GetCSRFToken(c)
 - Safe methods (GET, HEAD, OPTIONS, TRACE) are excluded — token is simply set/refreshed
 - On unsafe methods (POST, PUT, PATCH, DELETE), the request token (from header → form field → cookie) is validated against the session token using constant-time comparison to prevent timing attacks
 - After successful validation, the token is regenerated for additional security
+- The token cookie is set via the framework's cookie API, so it does not clobber other response cookies (e.g. the session cookie)
+- Token values are never written to logs, and comparison uses `crypto/subtle` constant-time equality
 - Returns HTTP `403 Forbidden` with `"CSRF token mismatch"` on validation failure
+
+## Development
+
+Each middleware is an independent Go module. Run the checks from within a module directory:
+```bash
+cd ratelimit   # or cors, csrf
+go vet ./...
+go test -race ./...
+```
+CI runs `gofmt`, `go vet`, and the race-enabled test suite for all three modules on every push and pull request.
+
+## License
+
+Released under the [MIT License](LICENSE).

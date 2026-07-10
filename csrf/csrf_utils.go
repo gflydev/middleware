@@ -2,37 +2,32 @@ package csrf
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
-	"fmt"
-	"github.com/gflydev/core/log"
-	"time"
 )
 
 // TokenLength defines the default length for CSRF tokens
 const TokenLength = 32
 
-// GenerateCSRFToken creates a cryptographically secure random token
+// GenerateCSRFToken creates a cryptographically secure random token.
+// It returns an empty string if the system's secure random source fails,
+// so callers must never treat an empty token as valid.
 func GenerateCSRFToken(length int) string {
 	bytes := make([]byte, length)
 	if _, err := rand.Read(bytes); err != nil {
-		// Fallback to timestamp-based token (less secure but functional)
-		return base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf("fallback_%d", time.Now().UnixNano())))
+		// Never fall back to a predictable token: a guessable CSRF token
+		// defeats the protection entirely. Signal failure with an empty string.
+		return ""
 	}
 	return base64.URLEncoding.EncodeToString(bytes)
 }
 
-// ConstantTimeCompare performs constant-time string comparison to prevent timing attacks
+// ConstantTimeCompare performs constant-time string comparison to prevent timing attacks.
+//
+// The token values are never logged: doing so would leak valid CSRF tokens to
+// anyone with read access to the logs.
 func ConstantTimeCompare(a, b string) bool {
-	log.Debugf("Comparing %s and %s", a, b)
-
-	if len(a) != len(b) {
-		return false
-	}
-
-	result := 0
-	for i := 0; i < len(a); i++ {
-		result |= int(a[i]) ^ int(b[i])
-	}
-
-	return result == 0
+	// subtle.ConstantTimeCompare returns 0 when the lengths differ, so the
+	// length check is handled without leaking timing information.
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }

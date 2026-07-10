@@ -1,11 +1,11 @@
 package csrf
 
 import (
-	"fmt"
 	"github.com/gflydev/core"
 	"github.com/gflydev/core/log"
 	"github.com/gflydev/core/utils"
 	"github.com/gflydev/http"
+	"github.com/valyala/fasthttp"
 	"strings"
 	"time"
 )
@@ -180,22 +180,34 @@ func getCSRFTokenFromRequest(c *core.Ctx, config Config) string {
 	return ""
 }
 
-// setCSRFCookie sets the CSRF token as a cookie
+// setCSRFCookie sets the CSRF token as a cookie.
+//
+// It uses fasthttp's SetCookie, which replaces only the cookie with this name
+// and leaves other Set-Cookie headers (e.g. the session cookie) intact. The
+// previous implementation called Header.Set("Set-Cookie", ...), which clobbered
+// every other cookie in the response.
 func setCSRFCookie(c *core.Ctx, token string, config Config) {
-	cookie := fmt.Sprintf("%s=%s; Path=/; Max-Age=%d",
-		config.CookieName,
-		token,
-		int(config.Expiry.Seconds()))
+	cookie := fasthttp.AcquireCookie()
+	defer fasthttp.ReleaseCookie(cookie)
 
-	if config.SecureOnly {
-		cookie += "; Secure"
+	cookie.SetKey(config.CookieName)
+	cookie.SetValue(token)
+	cookie.SetPath("/")
+	cookie.SetMaxAge(int(config.Expiry.Seconds()))
+	cookie.SetSecure(config.SecureOnly)
+
+	// The double-submit pattern requires JavaScript to read this cookie, so it
+	// is intentionally not HttpOnly.
+	switch strings.ToLower(config.SameSite) {
+	case "strict":
+		cookie.SetSameSite(fasthttp.CookieSameSiteStrictMode)
+	case "lax":
+		cookie.SetSameSite(fasthttp.CookieSameSiteLaxMode)
+	case "none":
+		cookie.SetSameSite(fasthttp.CookieSameSiteNoneMode)
 	}
 
-	if config.SameSite != "" {
-		cookie += fmt.Sprintf("; SameSite=%s", config.SameSite)
-	}
-
-	c.Root().Response.Header.Set("Set-Cookie", cookie)
+	c.Root().Response.Header.SetCookie(cookie)
 }
 
 // isSafeMethod checks if HTTP method is considered safe (doesn't modify state)
